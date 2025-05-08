@@ -31,6 +31,11 @@ def extract_json_string(text):
         raise ValueError("No valid JSON array found in model output.")
 
 def get_prompt(solidity_code):
+
+    numbered_code = "\n".join(
+    f"{i+1}: {line}" for i, line in enumerate(solidity_code.splitlines())
+    )
+
     PROMPT = f"""
     You are analyzing a Solidity smart contract to find vulnerabilities.
     return a JSON array where each object describes a single security issue.
@@ -58,20 +63,27 @@ def get_prompt(solidity_code):
     ]
 
     Rules:
+    - fromLine is the line number where the vulnerable code starts.
+    - toLine is the line number where the vulnerable code ends.
     - Do not include extra text or explanations.
     - Use only these vulnerabilityClass values: "Known compiler bugs", "Reentrancy", "Gas griefing", "Oracle manipulation", "Bad randomness", "Unexpected privilege grants", "Forced reception", "Integer overflow/underflow", "Race condition", "Unguarded function", "Inefficient storage key", "Front-running potential", "Miner manipulation", "Storage collision", "Signature replay", "Unsafe operation".
     - Explain how the vulnerability can be exploited.
     - "// SPDX-License-Identifier: MIT" is valid solidity code
-    - if 
+    - Explain how the vulnerability can be exploited.
 
     Return only the JSON output.
 
     Code:
-    {solidity_code}
+    {numbered_code}
     """
     return PROMPT
 
 def get_prompt2(solidity_code, record):
+
+    numbered_code = "\n".join(
+    f"{i+1}: {line}" for i, line in enumerate(solidity_code.splitlines())
+    )
+
     PROMPT = f"""
     You are analyzing a Solidity smart contract to find vulnerabilities.
 
@@ -88,7 +100,8 @@ def get_prompt2(solidity_code, record):
     ]
 
     Rules:
-
+    - fromLine is the line number where the vulnerable code starts.
+    - toLine is the line number where the vulnerable code ends.
     - vulnerabilityClass is "{record["type"]}"
     - example of "{record["type"]}" type of vulnerability is "{record["code"]}"
     - Do not include extra text or explanations.
@@ -98,15 +111,19 @@ def get_prompt2(solidity_code, record):
     Return only the JSON output.
 
     Code:
-    {solidity_code}
+    {numbered_code}
     """
     return PROMPT
 
 def get_prompt3(solidity_code):
-    PROMPT = f"""
-    You are analyzing a Solidity smart contract to find vulnerabilities.
 
-    If the entire code is invalid or unprocessable, return this:
+    numbered_code = "\n".join(
+    f"{i+1}: {line}" for i, line in enumerate(solidity_code.splitlines())
+    )
+
+    PROMPT = f"""
+    Return this:
+    
     [
     {{
         "fromLine": 1,
@@ -116,15 +133,15 @@ def get_prompt3(solidity_code):
     }}
     ]
     
-    If the entire code is not invalid or processable, return None:
-        
     Rules:
+    - toLine is the line number of rows of full code
     - Do not include extra text or explanations.
-
-    Return only the JSON output or None.
+    - JSON Array size is one
+    
+    Return only the JSON output.
 
     Code:
-    {solidity_code}
+    {numbered_code}
     """
     return PROMPT
 
@@ -159,34 +176,20 @@ def normalize_code(code):
 
 
 def generate_audit(source: str):
-
-    #preprocessing invalid code
-    if source[:7] == "contract":
-        json_string = """
-        [
-            {
-                "fromLine": 1,
-                "toLine": TOTAL_LINE_COUNT,
-                "vulnerabilityClass": "Invalid Code",
-                "description": "The entire code is considered invalid for audit processing."
-            }
-        ]
-        """
-        return json_string
-
-            
-
     # Search for matches
+    temperature = 0.1
     matched_records = find_record(source, 'db/db1.json')
-
-    if matched_records:
+    if source[:8] == "contract":
+        prompt = get_prompt3(source)
+    elif matched_records:
+        temperature = 0.2
         # Print results
         for match in matched_records:
             print(f"Matched Hash: {match['hash']}, Type: {match['type']}")
             print('-' * 50)
-        
         prompt = get_prompt2(source, matched_records[0])
     else:
+        temperature = 0.3
         prompt = get_prompt(source)
 
     
@@ -196,8 +199,8 @@ def generate_audit(source: str):
     with torch.no_grad():
         output = llm.generate(
             **inputs, 
-            max_new_tokens=8096,
-            temperature=0.4,
+            max_new_tokens=4096,
+            temperature=0.3,
             do_sample=True,
             pad_token_id=tokenizer.eos_token_id
         )
