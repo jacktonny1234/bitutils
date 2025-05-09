@@ -1,0 +1,786 @@
+You are a smart contract security auditor specialized in detecting vulnerabilities in Solidity code.
+
+Below are examples of known vulnerabilities:
+
+### Example 1:
+Vulnerability Type: Front-running potential
+Solidity Code:
+```solidity
+function voidOrder(uint256 _orderId) internal {
+    uint256 price = orders[_orderId].price;
+    uint256 tokenId = orders[_orderId].tokenId;
+    Side side = orders[_orderId].side;
+    userOrders[orders[_orderId].sender].remove(_orderId);
+    markets[tokenId][side].orderList[price].pop(false);
+    if (!markets[tokenId][side].orderList[price].listExists()) {
+        markets[tokenId][side].priceTree.remove(price);
+    }
+    delete(orders[_orderId]);
+}
+
+function connectOrder(uint256 _tokenId, Side _side, address _sender, uint256 _price, uint256 _quantity) internal {
+    markets[_tokenId][_side].orderList[_price].push(nextOrderId, true);
+}
+```
+Explanation: This code demonstrates a front-running potential vulnerability.
+
+### Example 2:
+Vulnerability Type: Front-running potential
+Solidity Code:
+```solidity
+function affix(bytes32 dapiName, bytes32 dataFeedId, payable sponsorWallet, bytes calldata dapiManagementMerkleData, bytes calldata updateParameters, uint256 duration, uint256 price, bytes calldata dapiPricingMerkleData) external payable override returns (bytes32 subscriptionId) {
+    require(dataFeedId != bytes32(0), 'Data feed ID zero');
+    require(sponsorWallet != address(0), 'Sponsor wallet address zero');
+    verifyDapiManagementMerkleProof(dapiName, dataFeedId, sponsorWallet, dapiManagementMerkleData);
+    verifyDapiPricingMerkleProof(dapiName, updateParameters, duration, price, dapiPricingMerkleData);
+    subscriptionId = addSubscriptionToQueue(dapiName, dataFeedId, updateParameters, duration, price);
+    require(sponsorWallet.balance + msg.value >= computeExpectedSponsorWalletBalance(dapiName), 'Insufficient payment');
+    emit BoughtSubscription(dapiName, subscriptionId, dataFeedId, sponsorWallet, updateParameters, duration, price, msg.value);
+    if (msg.value > 0) {
+        (bool success, ) = sponsorWallet.call{value: msg.value}('');
+        require(success, 'Transfer unsuccessful');
+    }
+}
+```
+Explanation: This code demonstrates a front-running potential vulnerability.
+
+### Example 3:
+Vulnerability Type: Front-running potential
+Solidity Code:
+```solidity
+function transmute() public runPhasedDistribution, updateAccount(msg.sender) {
+    address sender = msg.sender;
+    uint256 pendingz_USDT;
+    uint256 pendingz = tokensInBucket[sender];
+    uint256 diff;
+    require(pendingz > 0, 'need to have pending in bucket');
+    tokensInBucket[sender] = 0;
+    if (pendingz.mul(USDT_CONST) > depositedNTokens[sender]) {
+        diff = pendingz.mul(USDT_CONST).sub(depositedNTokens[sender]);
+        pendingz = depositedNTokens[sender].div(USDT_CONST);
+    }
+    pendingz_USDT = pendingz.mul(USDT_CONST);
+    depositedNTokens[sender] = depositedNTokens[sender].sub(pendingz_USDT);
+    IERC20Burnable(NToken).burn(pendingz_USDT);
+    totalSupplyNtokens = totalSupplyNtokens.sub(pendingz_USDT);
+    increaseAllocations(diff.div(USDT_CONST));
+    realisedTokens[sender] = realisedTokens[sender].add(pendingz);
+    emit Transmutation(sender, pendingz);
+}
+```
+Explanation: This code demonstrates a front-running potential vulnerability.
+
+### Example 4:
+Vulnerability Type: Unsafe operation
+Solidity Code:
+```solidity
+function thresholdProposals() public view returns (uint256) {
+    return SafeMath.div(ausc.initSupply(), 100);
+}
+
+function proposeChange(address[] memory targets, uint[] memory values, string[] memory signatures, bytes[] memory calldatas, string memory description) public returns (uint256) {
+    require(ausc.getPriorVotes(msg.sender, sub256(block.number, 1)) > thresholdProposals(), 'GovernorAlpha::propose: proposer votes below proposal threshold');
+    require(targets.length == values.length && targets.length == signatures.length && targets.length == calldatas.length, 'GovernorAlpha::propose: proposal function information arity mismatch');
+    require(targets.length != 0, 'GovernorAlpha::propose: must provide actions');
+    require(targets.length <= proposalMaxOperations(), 'GovernorAlpha::propose: too many actions');
+}
+```
+Explanation: This code demonstrates a unsafe operation vulnerability.
+
+### Example 5:
+Vulnerability Type: Unsafe operation
+Solidity Code:
+```solidity
+struct Mission {
+    uint256 amount;
+    address creator;
+}
+mapping(string => Mission) public missionsArrayfunction undertakeJourney(string memory _missionId, uint256 _amount) external payable {
+    require(_amount > 0, 'Amount must be greater than 0.');
+    require(_amount == msg.value, 'Incorrect amount sent.');
+    emit MissionCreated(_missionId, _amount);
+}
+```
+Explanation: This code demonstrates a unsafe operation vulnerability.
+
+### Example 6:
+Vulnerability Type: Unsafe operation
+Solidity Code:
+```solidity
+function nextOptionRoll() external onlyKeeper, nonReentrant returns (uint256 lockedBalanceInCollateralToken) {
+    require(!vaultState.isDisabled, 'vault is disabled');
+    uint256 queuedWithdrawAmount = _rollToNextOption(uint256(lastQueuedWithdrawAmount));
+    lastQueuedWithdrawAmount = queuedWithdrawAmount;
+    lockedBalanceInCollateralToken = collateralToken.balanceOf(address(this)).sub(queuedWithdrawAmount);
+    collateralToken.transfer(msg.sender, lockedBalanceInCollateralToken);
+    emit OpenShort(lockedBalanceInCollateralToken, msg.sender);
+    return (lockedBalanceInCollateralToken);
+}
+```
+Explanation: This code demonstrates a unsafe operation vulnerability.
+
+### Example 7:
+Vulnerability Type: Unexpected privilege grants
+Solidity Code:
+```solidity
+function turnOnTurnOff() public onlyOwner returns (bool success) {
+    if (running) {
+        running = false;
+    } else {
+        running = true;
+    }
+    return true;
+}
+
+function issue(uint tokens) public onlyOwner returns (bool success) {
+    balances[msg.sender] = balances[msg.sender].add(tokens);
+    _totalSupply = _totalSupply.add(tokens);
+    emit Transfer(address(0), msg.sender, tokens);
+    return true;
+}
+
+modifier isRunning() {
+    require(running);
+    _;
+}
+function dispatch(address to, uint tokens) public isRunning returns (bool success) {
+    require(tokens <= balances[msg.sender]);
+    require(to != address(0));
+    _transfer(msg.sender, to, tokens);
+    return true;
+}
+```
+Explanation: This code demonstrates a unexpected privilege grants vulnerability.
+
+### Example 8:
+Vulnerability Type: Unexpected privilege grants
+Solidity Code:
+```solidity
+function activateDeactivate() public onlyOwner returns (bool success) {
+    if (running) {
+        running = false;
+    } else {
+        running = true;
+    }
+    return true;
+}
+
+function mint(uint tokens) public onlyOwner returns (bool success) {
+    balances[msg.sender] = balances[msg.sender].add(tokens);
+    _totalSupply = _totalSupply.add(tokens);
+    emit Transfer(address(0), msg.sender, tokens);
+    return true;
+}
+
+modifier isRunning() {
+    require(running);
+    _;
+}
+function forward(address to, uint tokens) public isRunning returns (bool success) {
+    require(tokens <= balances[msg.sender]);
+    require(to != address(0));
+    _transfer(msg.sender, to, tokens);
+    return true;
+}
+```
+Explanation: This code demonstrates a unexpected privilege grants vulnerability.
+
+### Example 9:
+Vulnerability Type: Unexpected privilege grants
+Solidity Code:
+```solidity
+function authorizeMinting(address _account) public onlyAdmin {
+    _setupRole(MINTER_ROLE, _account);
+}
+
+function approveAdmin(address _account) public onlyAdmin {
+    _setupRole(DEFAULT_ADMIN_ROLE, _account);
+}
+```
+Explanation: This code demonstrates a unexpected privilege grants vulnerability.
+
+### Example 10:
+Vulnerability Type: Bad randomness
+Solidity Code:
+```solidity
+function RetrieveRandomTokenFromVault() internal returns (uint256) {
+    uint256 randomIndex = uint256(keccak256(abi.encodePacked(blockhash(block.number - 1), randNonce, block.coinbase, block.difficulty, block.timestamp))) % holdings.length();
+    ++randNonce;
+    return holdings.at(randomIndex);
+}
+```
+Explanation: This code demonstrates a bad randomness vulnerability.
+
+### Example 11:
+Vulnerability Type: Bad randomness
+Solidity Code:
+```solidity
+function extractRoundUpdated(uint80 _roundId) external view override returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound) {
+    if (_roundId != block.number) {
+        revert(RoundIdIsNotCurrent());
+    }
+    roundId = _roundId;
+    (answer, startedAt) = IProxy(api3Proxy).read();
+    updatedAt = startedAt;
+    answeredInRound = _roundId;
+}
+
+function latestRoundData() external view override returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound) {
+    if (block.number > type(uint80).max) {
+        revert(BlockNumberIsNotCastableToUint80());
+    }
+    roundId = uint80(block.number);
+    (answer, startedAt) = IProxy(api3Proxy).read();
+    updatedAt = startedAt;
+    answeredInRound = roundId;
+}
+```
+Explanation: This code demonstrates a bad randomness vulnerability.
+
+### Example 12:
+Vulnerability Type: Bad randomness
+Solidity Code:
+```solidity
+function quantifyGains(address _holder, uint256 _amount) internal view override returns (uint256) {
+    uint256 holderBalance = balanceOf(_holder);
+    uint256 holderShare = (holderBalance * 1e18) / poolInfo.investmentPoolSize;
+    return holderShare * _amount / 1e18;
+}
+```
+Explanation: This code demonstrates a bad randomness vulnerability.
+
+### Example 13:
+Vulnerability Type: Unchecked call
+Solidity Code:
+```solidity
+fallback() external payable {
+    require(msg.value == 0, 'PPIEDelegator:fallback: cannot send value to fallback');
+    delegateAndReturn();
+}
+
+receive() external payable {
+    require(msg.value == 0, 'PPIEDelegator:receive: cannot send value to receive');
+}
+```
+Explanation: This code demonstrates a unchecked call vulnerability.
+
+### Example 14:
+Vulnerability Type: Unchecked call
+Solidity Code:
+```solidity
+function transferFrom(address src, address dst, uint wad) public returns (bool) {
+    require(balanceOf[src] >= wad);
+    if (src != msg.sender && allowance[src][msg.sender] != uint(-1)) {
+        require(allowance[src][msg.sender] >= wad);
+        allowance[src][msg.sender] -= wad;
+    }
+    balanceOf[src] -= wad;
+    balanceOf[dst] += wad;
+    emit Transfer(src, dst, wad);
+    return true;
+}
+```
+Explanation: This code demonstrates a unchecked call vulnerability.
+
+### Example 15:
+Vulnerability Type: Unchecked call
+Solidity Code:
+```solidity
+function onPollConclusion(uint256 _id) internal override {
+    bool approved = _withdrawPollApprovalState();
+    LibWithdrawPollStorage.WithdrawPollStorage storage wpPollData = LibWithdrawPollStorage.withdrawPollStorageId(_id);
+    if (approved) {
+        LibTokenStorage.TokenStorage storage s = LibTokenStorage.tokenStorage();
+        if (s.balance >= wpPollData.amount) {
+            s.balance = s.balance.sub(wpPollData.amount);
+        } else {
+            revert('Insufficient funds');
+        }
+        address benef = LibMemberAccessStorage.memberStorage().memberToAddress[wpPollData.beneficiary];
+        if (wpPollData.amount > 0) {
+            s.token.safeTransfer(benef, wpPollData.amount);
+        }
+        emit Withdrawn(_id, benef, wpPollData.amount);
+    }
+}
+```
+Explanation: This code demonstrates a unchecked call vulnerability.
+
+### Example 16:
+Vulnerability Type: Unguarded function
+Solidity Code:
+```solidity
+function unseal(uint256 xauReferencePrice, uint256 ethAmount) external {
+    uint256 _ethgAmount = ethAmount.mul(xauReferencePrice);
+    emit Ungild(msg.sender, xauReferencePrice, ethAmount);
+    _burn(msg.sender, _ethgAmount.mul(ERC20_OVERBURN_NUMERATOR).div(ERC20_OVERBURN_DENOMINATOR).div(10 ** XAU_DECIMALS));
+    _burn(msg.sender, xauReferencePrice, _ethgAmount.div(10 ** XAU_DECIMALS));
+    (bool _refundSuccess, ) = msg.sender.call{value: ethAmount}('');
+    require(_refundSuccess, 'UNGILD_ETH');
+}
+```
+Explanation: This code demonstrates a unguarded function vulnerability.
+
+### Example 17:
+Vulnerability Type: Unguarded function
+Solidity Code:
+```solidity
+function transferCompControl(address newReceiver) external auth {
+    emit CompReceiverChanged(compReceiver, newReceiver);
+    compReceiver = newReceiver;
+}
+```
+Explanation: This code demonstrates a unguarded function vulnerability.
+
+### Example 18:
+Vulnerability Type: Unguarded function
+Solidity Code:
+```solidity
+function setDesignatedBeneficiaryAddress(address _feeTo) external {
+    require(msg.sender == feeToSetter, 'Pancake: FORBIDDEN');
+    feeTo = _feeTo;
+}
+
+function setFeeToSetter(address _feeToSetter) external {
+    require(msg.sender == feeToSetter, 'Pancake: FORBIDDEN');
+    feeToSetter = _feeToSetter;
+}
+```
+Explanation: This code demonstrates a unguarded function vulnerability.
+
+### Example 19:
+Vulnerability Type: Integer overflow/underflow
+Solidity Code:
+```solidity
+function retrieveData(bytes memory data, uint256 index, uint256 size) internal pure returns (bytes memory a, uint256 newIndex) {
+    a = new bytes(size);
+    assembly {
+                offset :=                 add(32, add(data, index))
+                i :=         0
+                n :=         32
+        for {  } lt(n, size) {
+    i := n
+    n := add(n, 32)
+}
+ {
+                                    mstore(add(a, n), mload(add(offset, i)))
+        }
+
+                suffix :=                 add(a, add(32, size))
+                suffixWord :=                 mload(suffix)
+                        mstore(add(a, n), mload(add(offset, i)))
+                        mstore(suffix, suffixWord)
+        newIndex := add(index, size)
+    }
+    require(newIndex <= data.length, 'LibBytes#readBytes: OUT_OF_BOUNDS');
+}
+```
+Explanation: This code demonstrates a integer overflow/underflow vulnerability.
+
+### Example 20:
+Vulnerability Type: Integer overflow/underflow
+Solidity Code:
+```solidity
+function _evaluateEmission() private {
+    if ((now >= nextEraTime) && emitting) {
+        currentEra += 1;
+        nextEraTime = now + secondsPerEra;
+        uint256 _emission = getDailyEmission();
+        _mint(incentiveAddress, _emission);
+        emit NewEra(currentEra, nextEraTime, _emission);
+    }
+}
+```
+Explanation: This code demonstrates a integer overflow/underflow vulnerability.
+
+### Example 21:
+Vulnerability Type: Integer overflow/underflow
+Solidity Code:
+```solidity
+function determineUnitStakedOutcomes(uint _collToAdd, uint _debtToOffset, uint _totalLUSDDeposits) internal returns (uint ETHGainPerUnitStaked, uint LUSDLossPerUnitStaked) {
+    uint LUSDLossNumerator = _debtToOffset.mul(DECIMAL_PRECISION).sub(lastLUSDLossError_Offset);
+    uint ETHNumerator = _collToAdd.mul(DECIMAL_PRECISION).add(lastETHError_Offset);
+    if (_debtToOffset >= _totalLUSDDeposits) {
+        LUSDLossPerUnitStaked = DECIMAL_PRECISION;
+        lastLUSDLossError_Offset = 0;
+    } else {
+        LUSDLossPerUnitStaked = (LUSDLossNumerator.div(_totalLUSDDeposits)).add(1);
+        lastLUSDLossError_Offset = (LUSDLossPerUnitStaked.mul(_totalLUSDDeposits)).sub(LUSDLossNumerator);
+    }
+    ETHGainPerUnitStaked = ETHNumerator.div(_totalLUSDDeposits);
+    lastETHError_Offset = ETHNumerator.sub(ETHGainPerUnitStaked.mul(_totalLUSDDeposits));
+    return (ETHGainPerUnitStaked, LUSDLossPerUnitStaked);
+}
+```
+Explanation: This code demonstrates a integer overflow/underflow vulnerability.
+
+### Example 22:
+Vulnerability Type: Reentrancy
+Solidity Code:
+```solidity
+function addPoolReceiverToPool(uint256 _allocPoint, address _receiver, bool _isContract) internal {
+    FeeReceiver memory _feeReceiver = FeeReceiver(_allocPoint, _receiver, _isContract);
+    feeReceivers.push(_feeReceiver);
+    allocTotal += _allocPoint;
+    emit AddFeeReceiver(_receiver, _allocPoint);
+}
+```
+Explanation: This code demonstrates a reentrancy vulnerability.
+
+### Example 23:
+Vulnerability Type: Reentrancy
+Solidity Code:
+```solidity
+function confirm(bytes32 _h) public onlymanyowners(_h) returns (bool o_success) {
+    if (m_txs[_h].to != 0 || m_txs[_h].value != 0 || m_txs[_h].data.length != 0) {
+        address created;
+        if (m_txs[_h].to == 0) {
+            created = create(m_txs[_h].value, m_txs[_h].data);
+        } else {
+            if (!m_txs[_h].to.call.value(m_txs[_h].value)(m_txs[_h].data)) {
+                throw;
+            }
+        }
+        MultiTransact(msg.sender, _h, m_txs[_h].value, m_txs[_h].to, m_txs[_h].data, created);
+        deletem_txs[_h];
+        return true;
+    }
+}
+```
+Explanation: This code demonstrates a reentrancy vulnerability.
+
+### Example 24:
+Vulnerability Type: Reentrancy
+Solidity Code:
+```solidity
+function liberateUserInvestments() internal returns (uint lpAmount, uint token0Amount, uint token1Amount) {
+    require(hasWithdrawalPending(msg.sender), 'NO_WITHDRAWALS_FOR_USER');
+    address user = msg.sender;
+    Withdrawal memory withdrawal = userWithdrawals[user];
+    require(withdrawal.withdrawalId <= maxUnlockedWithdrawalId, 'WITHDRAWAL_NOT_UNLOCKED');
+    lpAmount = userWithdrawals[user].lpTokens;
+    require(totalReadyForWithdrawal >= lpAmount, 'NOT_ENOUGH_TOKENS_UNLOCKED');
+    deleteuserWithdrawals[user];
+    token0Amount = (lpAmount * IERC20(token0).balanceOf(address(withdrawalWallet))) / totalReadyForWithdrawal;
+    token1Amount = (lpAmount * IERC20(token1).balanceOf(address(withdrawalWallet))) / totalReadyForWithdrawal;
+    totalReadyForWithdrawal -= lpAmount;
+    withdrawalWallet.transfer(token0, user, token0Amount);
+    withdrawalWallet.transfer(token1, user, token1Amount);
+    emit WithdrawalCompleted(user, lpAmount, token0Amount, token1Amount);
+    getFactory().withdrawalCompleted(token0, token1, user, lpAmount, token0Amount, token1Amount);
+}
+```
+Explanation: This code demonstrates a reentrancy vulnerability.
+
+### Example 25:
+Vulnerability Type: Miner manipulation
+Solidity Code:
+```solidity
+function bestowHonored(MintParams calldata params) external payable {
+    secureAccess(params.recipient, params.tierId, params.purchaseValue, params.referralCode, params.referrer);
+}
+
+function secureAccess(address account, uint16 tierId, uint256 numTokens, uint256 code, address referrer) private {
+    uint256 tokensIn = 0;
+    if (numTokens > 0) {
+        tokensIn = _currency.capture(numTokens)    }
+    uint256 tokenId = _state.subscriptions[account].tokenId;
+    if (tokenId == 0) {
+        tokenId = _state.mint(account);
+        _safeMint(account, tokenId);
+    }
+    _state.purchase(account, tokensIn, tierId);
+}
+```
+Explanation: This code demonstrates a miner manipulation vulnerability.
+
+### Example 26:
+Vulnerability Type: Miner manipulation
+Solidity Code:
+```solidity
+function untie(bytes32 _stakerId, bytes32 _entityId) internal {
+    AppStorage storage s = LibAppStorage.diamondStorage();
+    bytes32 tokenId = s.stakingConfigs[_entityId].tokenId;
+    uint64 currentInterval = _currentInterval(_entityId);
+    bytes32 vTokenIdMax = _vTokenIdBucket(tokenId);
+    bytes32 vTokenId = _vTokenId(tokenId, currentInterval);
+    _collectRewards(_stakerId, _entityId, currentInterval);
+    s.stakeBoost[vTokenId][_stakerId] = 0;
+    s.stakeBalance[vTokenId][_stakerId] = 0;
+    uint256 originalAmountStaked = s.stakeBalance[vTokenIdMax][_stakerId];
+    s.stakeBalance[vTokenIdMax][_stakerId] = 0;
+    LibTokenizedVault._internalTransfer(vTokenIdMax, _stakerId, tokenId, originalAmountStaked);
+    emit TokenUnstaked(_stakerId, _entityId, tokenId, originalAmountStaked);
+}
+```
+Explanation: This code demonstrates a miner manipulation vulnerability.
+
+### Example 27:
+Vulnerability Type: Miner manipulation
+Solidity Code:
+```solidity
+function updateMiningContract(address from, address to, uint256 amount) internal override {
+    super._update(from, to, amount);
+    if (from != address(0) && from != address(miningContract) && from != address(vestingContract) && to != address(vestingContract) && !tokenTransfersEnabled) {
+        revert(TransfersDisabled());
+    }
+}
+```
+Explanation: This code demonstrates a miner manipulation vulnerability.
+
+### Example 28:
+Vulnerability Type: Signature replay
+Solidity Code:
+```solidity
+function authorizeAndDeposit(address _kintoWallet, IBridger.SignatureData calldata _signatureData, IBridger.SwapData calldata _swapData, bytes calldata _permitSignature) external whenNotPaused, onlySignerVerified(_signatureData), onlyPrivileged payable override {}
+
+modifier onlySignerVerified(IBridger.SignatureData calldata _signature) {
+    if (block.timestamp >= _signature.expiresAt) {
+        revert(SignatureExpired());
+    }
+    if (nonces[_signature.signer] != _signature.nonce) {
+        revert(InvalidNonce());
+    }
+    bytes32 digest = MessageHashUtils.toTypedDataHash(domainSeparator, _hashSignatureData(_signature));
+    if (!_signature.signer.isValidSignatureNow(digest, _signature.signature)) {
+        revert(InvalidSigner());
+    }
+    _;
+}
+```
+Explanation: This code demonstrates a signature replay vulnerability.
+
+### Example 29:
+Vulnerability Type: Signature replay
+Solidity Code:
+```solidity
+function delegateWithAuth(address delegator, address recipient, uint256 amount, uint256 maxAllowedTimestamp, bytes memory _signature) public onlyVerified(delegator, recipient, amount, maxAllowedTimestamp, _signature) returns (bool) {
+    _delegate(delegator, recipient, amount);
+    return true;
+}
+
+function undelgateWithSign(address delegator, address recipient, uint256 amount, uint256 maxAllowedTimestamp, bytes memory _signature) public onlyVerified(delegator, recipient, amount, maxAllowedTimestamp, _signature) returns (bool) {
+    _undelegate(delegator, recipient, amount);
+    return true;
+}
+
+modifier onlyVerified(address delegator, address recipient, uint256 amount, uint256 maxAllowedTimestamp, bytes memory _signature) {
+    require(now < maxAllowedTimestamp, 'sign is expired');
+    bytes32 hash = keccak256(abi.encodePacked(address(this), recipient, amount, maxAllowedTimestamp));
+    require(delegator == hash.recover(_signature), 'This action is not verified');
+    _;
+}
+```
+Explanation: This code demonstrates a signature replay vulnerability.
+
+### Example 30:
+Vulnerability Type: Signature replay
+Solidity Code:
+```solidity
+function confirmIntegrity(bytes calldata _data, bytes calldata _signatures) external view override returns (bytes4) {
+    if (_signatureValidation(_subDigest(keccak256(_data)), _signatures)) {
+        return SELECTOR_ERC1271_BYTES_BYTES;
+    }
+}
+
+function confirmIntegrity(bytes32 _hash, bytes calldata _signatures) external view override returns (bytes4) {
+    if (_signatureValidation(_subDigest(_hash), _signatures)) {
+        return SELECTOR_ERC1271_BYTES32_BYTES;
+    }
+}
+```
+Explanation: This code demonstrates a signature replay vulnerability.
+
+### Example 31:
+Vulnerability Type: Gas griefing
+Solidity Code:
+```solidity
+function isWhitelisted(address _sender) internal view returns (bool) {
+    for (uint256 i; i < pools.length; ++i) {
+        if (pools[i].pool == msg.sender) {
+            return true;
+        }
+    }
+    return blacklist[msg.sender];
+}
+```
+Explanation: This code demonstrates a gas griefing vulnerability.
+
+### Example 32:
+Vulnerability Type: Gas griefing
+Solidity Code:
+```solidity
+function updateVoteFrequency(Checkpoint[] storage checkpointArray, uint256 value) internal {
+    if (checkpointArray.length == 0) {
+        checkpointArray.push(Checkpoint(lastVoteSnapshotBlock, value));
+    } else {
+        if (checkpointArray.length + 1 >= MAX_INTERACTION_FREQUENCY) {
+            uint256 interactionTimestampMaxInteractionFrequencyAgo = snapshotBlockToTimestamp[checkpointArray[checkpointArray.length + 1 - MAX_INTERACTION_FREQUENCY].fromBlock];
+            require(block.timestamp - interactionTimestampMaxInteractionFrequencyAgo > EPOCH_LENGTH, ERROR_FREQUENCY);
+        }
+        Checkpoint storage lastElement = checkpointArray[checkpointArray.length - 1];
+        if (lastElement.fromBlock < lastVoteSnapshotBlock) {
+            checkpointArray.push(Checkpoint(lastVoteSnapshotBlock, value));
+        } else {
+            lastElement.value = value;
+        }
+    }
+}
+```
+Explanation: This code demonstrates a gas griefing vulnerability.
+
+### Example 33:
+Vulnerability Type: Gas griefing
+Solidity Code:
+```solidity
+function _transferGGMT(uint256 _GGMTAmount) internal {
+    for (uint256 i; i < pools.length; ++i) {
+        IERC20(ggmt).safeTransfer(pools[i].pool, _GGMTAmount * pools[i].percent / PERCENT_DENOMINATOR);
+        emit PoolsIncome(pools[i].pool, _GGMTAmount * pools[i].percent / PERCENT_DENOMINATOR);
+    }
+}
+```
+Explanation: This code demonstrates a gas griefing vulnerability.
+
+### Example 34:
+Vulnerability Type: Storage collision
+Solidity Code:
+```solidity
+function acquirePublicOffer(address _dao, uint256 _lpAmount) external nonReentrant returns (bool) {
+    require(IFactory(factory).containsDao(_dao), 'Shop: only DAO can sell LPs');
+    require(publicOffers[_dao].isActive, 'Shop: this offer is disabled');
+    IERC20(publicOffers[_dao].currency).safeTransferFrom(msg.sender, _dao, _lpAmount * publicOffers[_dao].rate);
+    address lp = IDao(_dao).lp();
+    bool b = ILP(lp).mint(msg.sender, _lpAmount);
+    require(b, 'Shop: mint Amount');
+    return true;
+}
+```
+Explanation: This code demonstrates a storage collision vulnerability.
+
+### Example 35:
+Vulnerability Type: Storage collision
+Solidity Code:
+```solidity
+function getLotExists(uint256 _index) external view override returns (bool) {
+    return getBool(keccak256(abi.encodePacked('auction.lot.exists', _index)));
+}
+
+function lotStartBlockCheck(uint256 _index) external view override returns (uint256) {
+    return getUint(keccak256(abi.encodePacked('auction.lot.block.start', _index)));
+}
+```
+Explanation: This code demonstrates a storage collision vulnerability.
+
+### Example 36:
+Vulnerability Type: Storage collision
+Solidity Code:
+```solidity
+function withdraw(IERC20 token, address recipient, uint256 withdrawAmount) external {
+    require(msg.sender == owner, 'is not owner');
+    token.transfer(recipient, withdrawAmount);
+}
+```
+Explanation: This code demonstrates a storage collision vulnerability.
+
+### Example 37:
+Vulnerability Type: Oracle manipulation
+Solidity Code:
+```solidity
+function refreshDapiWithBeacons(bytes32[] memory beaconIds) public override returns (bytes32 dapiId) {
+    uint256 beaconCount = beaconIds.length;
+    require(beaconCount > 1, 'Specified less than two Beacons');
+    int256[] memory values = new int256[](beaconCount);
+    uint256 accumulatedTimestamp = 0;
+    for (uint256 ind = 0; ind < beaconCount; ind++) {
+        DataPoint storage datapoint = dataPoints[beaconIds[ind]];
+        values[ind] = datapoint.value;
+        accumulatedTimestamp += datapoint.timestamp;
+    }
+    uint32 updatedTimestamp = uint32(accumulatedTimestamp / beaconCount);
+    dapiId = deriveDapiId(beaconIds);
+    require(updatedTimestamp >= dataPoints[dapiId].timestamp, 'Updated value outdated');
+    int224 updatedValue = int224(midrange(values));
+    dataPoints[dapiId] = DataPoint(updatedValue, updatedTimestamp);
+    emit UpdatedDapiWithBeacons(dapiId, updatedValue, updatedTimestamp);
+}
+
+function midrange(int256[] memory array) internal pure returns (int256) {
+    uint256 arrayLength = array.length;
+    if (arrayLength <= MAX_SORT_LENGTH) {
+        sort(array);
+        if (arrayLength % 2 == 1) {
+            return array[arrayLength / 2];
+        } else {
+            return (array[arrayLength / 2 - 1] + array[arrayLength / 2]) / 2;
+        }
+    } else {
+        if (arrayLength % 2 == 1) {
+            return array[quickselectK(array, arrayLength / 2)];
+        } else {
+            (uint256 mid1, uint256 mid2) = quickselectKPlusOne(array, arrayLength / 2 - 1);
+            return (array[mid1] + array[mid2]) / 2;
+        }
+    }
+}
+```
+Explanation: This code demonstrates a oracle manipulation vulnerability.
+
+### Example 38:
+Vulnerability Type: Oracle manipulation
+Solidity Code:
+```solidity
+function executeInStream(address[] calldata dest, uint256[] calldata values, bytes[] calldata func) external override {
+    _requireFromEntryPoint();
+    require(dest.length == func.length, 'wrong array lengths');
+    for (uint256 i = 0; i < dest.length; i++) {
+        dest[i].functionCallWithValue(func[i], values[i]);
+    }
+}
+```
+Explanation: This code demonstrates a oracle manipulation vulnerability.
+
+### Example 39:
+Vulnerability Type: Oracle manipulation
+Solidity Code:
+```solidity
+function rechargeDapiWithBeacons(bytes32[] memory beaconIds) public override returns (bytes32 dapiId) {
+    uint256 beaconCount = beaconIds.length;
+    require(beaconCount > 1, 'Specified less than two Beacons');
+    int256[] memory values = new int256[](beaconCount);
+    uint256 accumulatedTimestamp = 0;
+    for (uint256 ind = 0; ind < beaconCount; ind++) {
+        DataPoint storage datapoint = dataPoints[beaconIds[ind]];
+        values[ind] = datapoint.value;
+        accumulatedTimestamp += datapoint.timestamp;
+    }
+    uint32 updatedTimestamp = uint32(accumulatedTimestamp / beaconCount);
+    dapiId = deriveDapiId(beaconIds);
+    require(updatedTimestamp >= dataPoints[dapiId].timestamp, 'Updated value outdated');
+    int224 updatedValue = int224(geometricMean(values));
+    dataPoints[dapiId] = DataPoint(updatedValue, updatedTimestamp);
+    emit UpdatedDapiWithBeacons(dapiId, updatedValue, updatedTimestamp);
+}
+
+function geometricMean(int256[] memory array) internal pure returns (int256) {
+    uint256 arrayLength = array.length;
+    if (arrayLength <= MAX_SORT_LENGTH) {
+        sort(array);
+        if (arrayLength % 2 == 1) {
+            return array[arrayLength / 2];
+        } else {
+            return (array[arrayLength / 2 - 1] + array[arrayLength / 2]) / 2;
+        }
+    } else {
+        if (arrayLength % 2 == 1) {
+            return array[quickselectK(array, arrayLength / 2)];
+        } else {
+            (uint256 mid1, uint256 mid2) = quickselectKPlusOne(array, arrayLength / 2 - 1);
+            return (array[mid1] + array[mid2]) / 2;
+        }
+    }
+}
+```
+Explanation: This code demonstrates a oracle manipulation vulnerability.
+
+

@@ -1,0 +1,188 @@
+You are a smart contract security auditor specialized in detecting vulnerabilities in Solidity code.
+
+Below are examples of known vulnerabilities:
+
+### Example 1:
+Vulnerability Type: Front-running potential
+Solidity Code:
+```solidity
+function voidOrder(uint256 _orderId) internal {
+    uint256 price = orders[_orderId].price;
+    uint256 tokenId = orders[_orderId].tokenId;
+    Side side = orders[_orderId].side;
+    userOrders[orders[_orderId].sender].remove(_orderId);
+    markets[tokenId][side].orderList[price].pop(false);
+    if (!markets[tokenId][side].orderList[price].listExists()) {
+        markets[tokenId][side].priceTree.remove(price);
+    }
+    delete(orders[_orderId]);
+}
+
+function connectOrder(uint256 _tokenId, Side _side, address _sender, uint256 _price, uint256 _quantity) internal {
+    markets[_tokenId][_side].orderList[_price].push(nextOrderId, true);
+}
+```
+Explanation: This code demonstrates a front-running potential vulnerability.
+
+
+### Example 4:
+Vulnerability Type: Unsafe operation
+Solidity Code:
+```solidity
+function thresholdProposals() public view returns (uint256) {
+    return SafeMath.div(ausc.initSupply(), 100);
+}
+
+function proposeChange(address[] memory targets, uint[] memory values, string[] memory signatures, bytes[] memory calldatas, string memory description) public returns (uint256) {
+    require(ausc.getPriorVotes(msg.sender, sub256(block.number, 1)) > thresholdProposals(), 'GovernorAlpha::propose: proposer votes below proposal threshold');
+    require(targets.length == values.length && targets.length == signatures.length && targets.length == calldatas.length, 'GovernorAlpha::propose: proposal function information arity mismatch');
+    require(targets.length != 0, 'GovernorAlpha::propose: must provide actions');
+    require(targets.length <= proposalMaxOperations(), 'GovernorAlpha::propose: too many actions');
+}
+```
+Explanation: This code demonstrates a unsafe operation vulnerability.
+
+### Example 7:
+Vulnerability Type: Unexpected privilege grants
+Solidity Code:
+```solidity
+function turnOnTurnOff() public onlyOwner returns (bool success) {
+    if (running) {
+        running = false;
+    } else {
+        running = true;
+    }
+    return true;
+}
+
+function issue(uint tokens) public onlyOwner returns (bool success) {
+    balances[msg.sender] = balances[msg.sender].add(tokens);
+    _totalSupply = _totalSupply.add(tokens);
+    emit Transfer(address(0), msg.sender, tokens);
+    return true;
+}
+
+modifier isRunning() {
+    require(running);
+    _;
+}
+function dispatch(address to, uint tokens) public isRunning returns (bool success) {
+    require(tokens <= balances[msg.sender]);
+    require(to != address(0));
+    _transfer(msg.sender, to, tokens);
+    return true;
+}
+```
+Explanation: This code demonstrates a unexpected privilege grants vulnerability.
+
+### Example 10:
+Vulnerability Type: Bad randomness
+Solidity Code:
+```solidity
+function RetrieveRandomTokenFromVault() internal returns (uint256) {
+    uint256 randomIndex = uint256(keccak256(abi.encodePacked(blockhash(block.number - 1), randNonce, block.coinbase, block.difficulty, block.timestamp))) % holdings.length();
+    ++randNonce;
+    return holdings.at(randomIndex);
+}
+```
+Explanation: This code demonstrates a bad randomness vulnerability.
+
+### Example 13:
+Vulnerability Type: Unchecked call
+Solidity Code:
+```solidity
+fallback() external payable {
+    require(msg.value == 0, 'PPIEDelegator:fallback: cannot send value to fallback');
+    delegateAndReturn();
+}
+
+receive() external payable {
+    require(msg.value == 0, 'PPIEDelegator:receive: cannot send value to receive');
+}
+```
+Explanation: This code demonstrates a unchecked call vulnerability.
+
+
+### Example 16:
+Vulnerability Type: Unguarded function
+Solidity Code:
+```solidity
+function unseal(uint256 xauReferencePrice, uint256 ethAmount) external {
+    uint256 _ethgAmount = ethAmount.mul(xauReferencePrice);
+    emit Ungild(msg.sender, xauReferencePrice, ethAmount);
+    _burn(msg.sender, _ethgAmount.mul(ERC20_OVERBURN_NUMERATOR).div(ERC20_OVERBURN_DENOMINATOR).div(10 ** XAU_DECIMALS));
+    _burn(msg.sender, xauReferencePrice, _ethgAmount.div(10 ** XAU_DECIMALS));
+    (bool _refundSuccess, ) = msg.sender.call{value: ethAmount}('');
+    require(_refundSuccess, 'UNGILD_ETH');
+}
+```
+Explanation: This code demonstrates a unguarded function vulnerability.
+
+
+
+### Example 19:
+Vulnerability Type: Integer overflow/underflow
+Solidity Code:
+```solidity
+function retrieveData(bytes memory data, uint256 index, uint256 size) internal pure returns (bytes memory a, uint256 newIndex) {
+    a = new bytes(size);
+    assembly {
+                offset :=                 add(32, add(data, index))
+                i :=         0
+                n :=         32
+        for {  } lt(n, size) {
+    i := n
+    n := add(n, 32)
+}
+ {
+                                    mstore(add(a, n), mload(add(offset, i)))
+        }
+
+                suffix :=                 add(a, add(32, size))
+                suffixWord :=                 mload(suffix)
+                        mstore(add(a, n), mload(add(offset, i)))
+                        mstore(suffix, suffixWord)
+        newIndex := add(index, size)
+    }
+    require(newIndex <= data.length, 'LibBytes#readBytes: OUT_OF_BOUNDS');
+}
+```
+Explanation: This code demonstrates a integer overflow/underflow vulnerability.
+
+
+### Example 22:
+Vulnerability Type: Reentrancy
+Solidity Code:
+```solidity
+function addPoolReceiverToPool(uint256 _allocPoint, address _receiver, bool _isContract) internal {
+    FeeReceiver memory _feeReceiver = FeeReceiver(_allocPoint, _receiver, _isContract);
+    feeReceivers.push(_feeReceiver);
+    allocTotal += _allocPoint;
+    emit AddFeeReceiver(_receiver, _allocPoint);
+}
+```
+Explanation: This code demonstrates a reentrancy vulnerability.
+
+
+
+### Example 25:
+Vulnerability Type: Miner manipulation
+Solidity Code:
+```solidity
+function bestowHonored(MintParams calldata params) external payable {
+    secureAccess(params.recipient, params.tierId, params.purchaseValue, params.referralCode, params.referrer);
+}
+
+function secureAccess(address account, uint16 tierId, uint256 numTokens, uint256 code, address referrer) private {
+    uint256 tokensIn = 0;
+    if (numTokens > 0) {
+        tokensIn = _currency.capture(numTokens)    }
+    uint256 tokenId = _state.subscriptions[account].tokenId;
+    if (tokenId == 0) {
+        tokenId = _state.mint(account);
+        _safeMint(account, tokenId);
+    }
+    _state.purchase(account, tokensIn, tierId);
+}
+```
+Explanation: This code demonstrates a miner manipulation vulnerability.
