@@ -8,8 +8,27 @@ import torch
 import re
 import hashlib
 from collections import OrderedDict
+from openai import AsyncOpenAI
+from solidity_audit_lib.messaging import AuditBase
+import asyncio
 
 app = FastAPI()
+
+GPT_MODEL = "anthropic/claude-3.7-sonnet"
+
+class ROLES:
+    SYSTEM = "system"
+    ASSISTANT = "assistant"
+    USER = "user"
+
+# class Response(AuditBase):
+#     content: str = Field(..., title="Contract code", description="Code of vulnerable contract")
+
+
+client = AsyncOpenAI(
+    base_url="https://openrouter.ai/api/v1",
+    api_key="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",
+)
 
 # Load Mistral 7B Instruct model and tokenizer
 model_name = "mistralai/Mistral-7B-Instruct-v0.2"
@@ -34,6 +53,77 @@ def extract_json_string(text):
         return match.group(0)
     else:
         return "[]"
+
+def get_gpt_prompt():
+    return """
+    You are helping audit a Solidity smart contract.
+    Your job is to review the given Solidity code and identify only the vulnerabilities that are clearly present based on the code itself.
+
+    Follow these strict guidelines:
+
+    - Use the line numbers in the code to pinpoint the exact location of each vulnerability.
+
+    - Only include issues that match one of these vulnerability classes:
+    "Reentrancy", "Gas griefing", "Bad randomness", "Forced reception", "Unguarded function", "Signature replay"
+
+    - Do not report any other types of issues.
+
+    - Do not guess or infer intent. Only report issues that are directly observable from the code as written.
+
+    - There must be at least one vulnerable issue. Don't return []
+
+    - If the code is completely invalid or cannot be reviewed meaningfully, return a single issue that covers the full file.
+
+    - Output should be in pure JSON format, with no extra text or explanation.
+
+    Use this JSON structure:
+
+    [
+    {
+        "fromLine": 10,
+        "toLine": 15,
+        "vulnerabilityClass": "Reentrancy",
+        "description": "The withdraw function calls an external address before updating internal balance, allowing reentrancy."
+    },
+    {
+        "fromLine": 22,
+        "toLine": 22,
+        "vulnerabilityClass": "Unguarded function",
+        "description": "The setOwner function is externally accessible without any access control."
+    }
+    ]
+    """
+
+def get_gpt_prompt2(record):
+    PROMPT =  f"""
+You are analyzing a Solidity smart contract for vulnerabilities.
+
+Your task is to return a JSON array. Each object in the array must describe a single security issue found in the code.
+
+Please follow these strict guidelines:
+
+- Use line numbers to identify where the vulnerability starts and ends.
+- Use the following fields in each object:
+  - fromLine: starting line of the vulnerable code
+  - toLine: ending line of the vulnerable code
+  - vulnerabilityClass: the type of vulnerability — use this exact string: {record["type"]},
+  - description: a short explanation of how this vulnerability could be exploited
+- You must include this example code for reference: {record["code"]},
+- Do not include any text before or after the JSON.
+- Do not include any explanations, only the JSON array.
+
+Format your response exactly like this:
+
+[
+  {{
+    "fromLine": 10,
+    "toLine": 15,
+    "vulnerabilityClass": "{record["type"]}",
+    "description": "The withdraw function calls an external address before updating internal balance, allowing reentrancy."
+  }}
+]
+    """
+    return PROMPT
 
 def get_prompt(solidity_code):
 
@@ -62,7 +152,7 @@ def get_prompt(solidity_code):
     - fromLine is the line number where the vulnerable code starts.
     - toLine is the line number where the vulnerable code ends.
     - Do not include extra text or explanations.
-    - Use only these vulnerabilityClass values: "Known compiler bugs", "Reentrancy", "Gas griefing", "Oracle manipulation", "Bad randomness", "Unexpected privilege grants", "Forced reception", "Integer overflow/underflow", "Race condition", "Unguarded function", "Inefficient storage key", "Front-running potential", "Miner manipulation", "Storage collision", "Signature replay", "Unsafe operation".
+    - Use only these vulnerabilityClass values: "Reentrancy", "Gas griefing", "Bad randomness", "Forced reception", "Unguarded function", "Signature replay".
     - Describe how the vulnerability can be exploited.
     - "// SPDX-License-Identifier: MIT" is valid solidity code
     - Return Must include fromLine, toLine, vulnerabilityClass, description
@@ -224,39 +314,117 @@ def reference(prompt, temperature = 0.0):
     
     return message
 
-def generate_audit(source: str):
+
+async def gpt_reference(prompt, code, temperature=0.3):
+
+    numbered_code = "\n".join(
+    f"{i+1}: {line}" for i, line in enumerate(code.splitlines())
+    )
+
+
+    completion = await client.beta.chat.completions.parse(
+        model=GPT_MODEL,
+        messages=[
+            {"role": ROLES.SYSTEM, "content": prompt},
+            # Output format guidance is provided automatically by OpenAI SDK.
+            {
+                "role": ROLES.USER,
+                "content": f"{numbered_code}",
+            },
+        ],
+        # response_format=ValidatorTask,
+        temperature=temperature,
+    )
+    message = completion.choices[0].message
+    print(f"GPT message: {message.content}")
+    if message.content:
+        return message.content
+    else:
+        return "[]"
+
+def find_function_position(contract_code: str, func_code: str):
+    contract_lines = contract_code.splitlines()
+    func_lines = func_code.strip().splitlines()
+
+    # Try to find where func_code block matches inside the contract
+    for i in range(len(contract_lines) - len(func_lines) + 1):
+        match = True
+        for j in range(len(func_lines)):
+            if contract_lines[i + j].strip() != func_lines[j].strip():
+                match = False
+                break
+        if match:
+            # Found the func_code block inside contract_lines starting at line i
+            # Now we need to find just the first function block inside func_code
+            first_func_start = None
+            brace_depth = 0
+            for k, line in enumerate(func_lines):
+                if first_func_start is None and re.match(r'\s*function\s', line):
+                    first_func_start = k
+                if first_func_start is not None:
+                    brace_depth += line.count('{')
+                    brace_depth -= line.count('}')
+                    if brace_depth == 0:
+                        first_func_end = k
+                        return i + first_func_start + 1, i + first_func_end + 1  # 1-based lines
+
+    return None, None
+
+async def generate_audit(source: str):
     # Search for matches
     temperature = 0.1
-    mode = 0
     matched_records = find_record(source, 'db/db1.json')
     if source[:8] == "contract":
         prompt = get_prompt3(source)
+        message = reference(prompt)
+        json_string = extract_json_string(message)
     elif matched_records:
         # Print results
         for match in matched_records:
             print(f"Matched Hash: {match['hash']}, Type: {match['type']}")
             print('-' * 50)
-        prompt = get_prompt2(source, matched_records[0])
+            start_line, end_line = find_function_position(source, matched_records[0]["code"])
+        json_string = f"""
+            [
+            {{
+                "fromLine": {start_line},
+                "toLine": {end_line},
+                "vulnerabilityClass": "{matched_records[0]["type"]}",
+                "description": "audit processing."
+            }}
+            ]
+        """
+
+        
+        # prompt = get_prompt2(source, matched_records[0])
+        # message = reference(prompt)
+        # json_string = extract_json_string(message)
+        # prompt = get_gpt_prompt2(matched_records[0])
+        # json_string = await gpt_reference(prompt, source)
     else:
-        mode = 1
         prompt = get_prompt4(source)
-        # return "[]"
+        message = reference(prompt)
+        print(f"========>source len:{len(source)}")
+        if "True" in message and len(source) > 3500: # valid code
+            json_string = "[]"
+        else:
+            json_string = await gpt_reference(get_gpt_prompt(), source)
+            # json_string = extract_json_string(message)        
 
     # show_section(prompt)
 
-    # Tokenize and generate
-    message = reference(prompt)
-
-    
-    if mode == 0:
-        json_string = extract_json_string(message)
-    else:
-        show_section(message)
-        if "True" in message: # valid code
-            json_string = "[]"
-        else:
-            message = reference(get_prompt(source), temperature=1)
-            json_string = extract_json_string(message)
+    # if mode == 0:
+    #     # Tokenize and generate
+    #     message = reference(prompt)
+    #     json_string = extract_json_string(message)
+    # elif mode == 1:
+    # else:
+    #     # show_section(message)
+    #     if "True" in message: # valid code
+    #         json_string = "[]"
+    #     else:
+    #         json_string = await gpt_reference(get_gpt_prompt(), source)
+    #         # json_string = extract_json_string(message)
 
     return json_string
 
@@ -331,38 +499,46 @@ async def submit(request: Request):
     # Check cache
     if index in cache:
         print("======cache hit=======")
-        return cache[index]
+        for _ in range(15):  # Wait up to 15 seconds
+            result = cache.get(index)
+            if result != "pending":
+                return result
+            await asyncio.sleep(1)
+        raise HTTPException(status_code=503, detail="Audit is still being processed")
 
     print("======cache miss=======")
+        # Set as pending
+    cache[index] = "pending"
+    if len(cache) > 20:
+        cache.popitem(last=False)
+
     tries = int(os.getenv("MAX_TRIES", "3"))
     is_valid, result = False, None
 
     while tries > 0:
-        result = generate_audit(contract_code)
+        result = await generate_audit(contract_code)
         
         result = try_prepare_result(result)
 
         if result is not None:
             is_valid = True
-            # with open("req_history", "a") as f:
-            #     f.write("-"*300 + "\n")
-            #     f.write("-"*300 + "\n")
-            #     f.write(contract_code + "\n")
-            #     f.write("-"*300 + "\n")
-            #     json.dump(result, f, indent=2)
-            #     f.write("-"*300 + "\n")
-            #     f.write("-"*300 + "\n")
+            with open("req_history", "a") as f:
+                f.write("-"*50 + "\n")
+                f.write("task code: " + contract_code + "\n")
+                f.write("-"*50 + "\n")
+                json.dump(result, f, indent=2)
+                f.write("-"*50 + "\n")
             break
         tries -= 1
 
     if not is_valid:
         raise HTTPException(status_code=400, detail="Unable to prepare audit")
 
-    # Save to cache (ensure only last 10 are stored)
-    if index not in cache:
-        if len(cache) >= 20:
-            cache.popitem(last=False)  # Remove oldest
-        cache[index] = result
+    # # Save to cache (ensure only last 10 are stored)
+    # if index not in cache:
+    #     if len(cache) >= 20:
+    #         cache.popitem(last=False)  # Remove oldest
+    cache[index] = result
 
     return result
 
